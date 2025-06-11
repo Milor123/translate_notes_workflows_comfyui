@@ -65,7 +65,7 @@ TARGET_LANGUAGE = es
 3.  Run the script from your terminal:
 
     ```bash
-    python translate_comfyui_workflow.py.py
+    python translate_comfyui_workflow.py
     ```
 
 4.  The script will guide you by asking for:
