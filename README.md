@@ -1,91 +1,91 @@
-# Traductor de Notas para Workflows de ComfyUI
+# ComfyUI Workflow Note Translator
 
-Este script de Python traduce las notas de texto dentro de tus archivos de workflow (`.json`) de ComfyUI, permitiéndote elegir entre una traducción rápida con Google Translate o una de mayor calidad y contexto con la API de OpenRouter.
+This Python script translates the text notes within your ComfyUI workflow files (`.json`), allowing you to choose between a quick translation via Google Translate or a higher-quality, context-aware translation using the OpenRouter API.
 
-## 🚀 Características
+## 🚀 Features
 
-* **Identificación Automática**: Detecta automáticamente los nodos de tipo `Note` dentro del JSON de tu workflow.
-* **Dos Modos de Traducción**:
-    * **Google Translate**: Rápido y sencillo, no requiere API Key. Ideal para traducciones generales.
-    * **OpenRouter AI**: Permite usar modelos de IA avanzados (GPT, Claude, Mistral, Gemini, etc.) para traducciones más precisas y conscientes del contexto. Requiere una API Key de OpenRouter.
-* **Altamente Configurable**:
-    * Gestiona tu API Key, URL, modelo de IA y otros parámetros a través de un archivo `config.ini`.
-    * Define el idioma de origen y de destino.
-    * Opción de **detección automática del idioma** (`AUTO`).
-* **Contexto Específico para IA**: Al usar OpenRouter, se envía un _system prompt_ detallado a la IA para que entienda el contexto de ComfyUI, asegurando que los términos técnicos se traduzcan con precisión.
-* **Seguro**: Nunca sobrescribe tu archivo original. Guarda el resultado en un nuevo archivo con un nombre descriptivo (ej., `workflow_traducido_ai_en_a_es.json`).
-* **Manejo de Errores**: Si una nota no puede ser traducida, el script mantiene el texto original en lugar de fallar, asegurando la integridad del workflow.
+* **Automatic Detection**: Automatically identifies nodes of type `Note` within your workflow's JSON file.
+* **Two Translation Modes**:
+    * **Google Translate**: Fast and simple, no API key required. Ideal for general-purpose translations.
+    * **OpenRouter AI**: Allows you to use advanced AI models (GPT, Claude, Mistral, Gemini, etc.) for more accurate and context-aware translations. Requires an OpenRouter API Key.
+* **Highly Configurable**:
+    * Manage your API Key, base URL, preferred AI model, and other settings via a `config.ini` file.
+    * Define the source and target languages for translation.
+    * Option for **automatic language detection** (`AUTO`).
+* **AI-Specific Context**: When using OpenRouter, a detailed system prompt is sent to the AI to provide it with the context of ComfyUI, ensuring technical terms are translated accurately.
+* **Safe**: It never overwrites your original file. The result is saved to a new, descriptively named file (e.g., `workflow_translated_ai_en_to_es.json`).
+* **Error Handling**: If a note fails to translate, the script keeps the original text instead of crashing, ensuring the integrity of your workflow.
 
-## 📋 Requisitos
+## 📋 Requirements
 
-* Python 3.7 o superior.
-* Librerías de Python: `deep_translator` y `openai`.
+* Python 3.7 or higher.
+* The following Python libraries: `deep_translator` and `openai`.
 
-Puedes instalarlas fácilmente con pip:
+You can easily install them using pip:
 ```bash
 pip install deep_translator openai
 ```
 
-## 🔧 Configuración
+## 🔧 Configuration
 
-Para usar la traducción con **OpenRouter AI**, es necesario configurar el archivo `config.ini`. Si el archivo no existe, se creará uno automáticamente con valores por defecto la primera vez que ejecutes el script.
+To use the **OpenRouter AI** translation, you must configure the `config.ini` file. If this file doesn't exist, one will be created automatically with default values the first time you run the script.
 
-**Pasos:**
+**Steps:**
 
-1.  **Crea el archivo `config.ini`** en el mismo directorio que el script (o déja que el script lo cree por ti).
-2.  **Edita el archivo** con tus datos:
+1.  **Create the `config.ini` file** in the same directory as the script (or let the script create it for you).
+2.  **Edit the file** with your information:
 
 ```ini
 [OpenRouter]
-# Fundamental: Reemplaza esto con tu API Key de OpenRouter.
-API_KEY = TU_OPENROUTER_API_KEY_AQUI
+# Required: Replace this with your API Key from OpenRouter.
+API_KEY = YOUR_OPENROUTER_API_KEY_HERE
 
-# Opcional: Modelo de IA a utilizar. Consulta la documentación de OpenRouter para más modelos.
+# Optional: The AI model to use. Check the OpenRouter documentation for more models.
 MODEL_NAME = openai/gpt-4o
 
-# Opcionales: Déjalos como están si no estás seguro.
+# Optional: You can leave these as they are if you're unsure.
 BASE_URL = https://openrouter.ai/api/v1
-HTTP_REFERER = https://tu-sitio.com
-X_TITLE = Mi Traductor ComfyUI
+HTTP_REFERER = https://your-site.com
+X_TITLE = My ComfyUI Translator
 
 [General]
-# Idioma de origen (ej: en, es). Usa AUTO para detección automática.
+# Source language (e.g., en, es). Use AUTO for automatic detection.
 SOURCE_LANGUAGE = en
 
-# Idioma de destino (ej: es, fr, de).
+# Target language (e.g., es, fr, de).
 TARGET_LANGUAGE = es
 ```
 
-## ▶️ Uso
+## ▶️ Usage
 
-1.  Asegúrate de tener Python y las librerías instaladas.
-2.  Configura tu archivo `config.ini` (especialmente la `API_KEY` si vas a usar OpenRouter).
-3.  Ejecuta el script desde tu terminal:
+1.  Make sure you have Python and the required libraries installed.
+2.  Set up your `config.ini` file (especially the `API_KEY` if using OpenRouter).
+3.  Run the script from your terminal:
 
     ```bash
-    python tu_script.py
+    python your_script.py
     ```
-    *(Reemplaza `translate_comfyui_workflow.py` con el nombre real de tu archivo)*
+    *(Replace `translate_comfyui_workflow.py` with the actual name of your file)*
 
-4.  El script te guiará pidiéndote:
-    * La ruta a tu archivo de workflow `.json`.
-    * El método de traducción que deseas usar (Google Translate u OpenRouter AI).
+4.  The script will guide you by asking for:
+    * The path to your `.json` workflow file.
+    * The translation method you wish to use (Google Translate or OpenRouter AI).
 
-Al finalizar, se generará un nuevo archivo JSON con las notas traducidas en el mismo directorio que el original.
+When finished, a new JSON file with the translated notes will be generated in the same directory as the original.
 
-## 🧠 ¿Cómo Funciona la Identificación de Notas?
+## 🧠 How Note Detection Works
 
-El script analiza la estructura del archivo `.json` y busca específicamente los nodos cuyo `type` es `"Note"`. El texto a traducir se extrae del campo `widgets_values[0]` de dichos nodos. El resto de la estructura del workflow permanece intacta para garantizar que siga siendo funcional.
+The script parses the `.json` file structure and specifically looks for nodes where the `type` is `"Note"`. The text to be translated is extracted from the `widgets_values[0]` field of these nodes. The rest of the workflow structure remains untouched to ensure it stays fully functional.
 
-## 💡 Nota sobre la Calidad de Traducción
+## 💡 A Note on Translation Quality
 
-* **Google Translate**: Es una opción rápida y efectiva para entender el contenido general. Puede que no sea la mejor para matices técnicos muy específicos.
-* **OpenRouter AI**: La calidad dependerá del modelo de IA que elijas. Modelos como GPT-4o o Claude 3 Opus suelen ofrecer traducciones superiores que comprenden mejor el contexto, aunque pueden ser más lentos o tener un coste asociado en OpenRouter.
+* **Google Translate**: A quick and effective option for understanding the general content. It may not be ideal for highly specific technical nuances.
+* **OpenRouter AI**: The quality will depend on the AI model you choose. Models like GPT-4o or Claude 3 Opus typically offer superior translations that better grasp the context, although they may be slower or have an associated cost on OpenRouter.
 
-## 👨‍💻 Desarrollo
+## 👨‍💻 Development
 
-Este script fue desarrollado con la asistencia de un modelo de lenguaje grande (LLM). La base del código y la lógica fueron generados y refinados a través de interacciones con Gemini 2.5 Pro Preview 05-06. El objetivo era crear una herramienta útil y flexible para la comunidad de ComfyUI.
+This script was developed with the assistance of a large language model (LLM). The core code and logic were generated and refined through interactions with Claude 3 Opus. The goal was to create a useful and flexible tool for the ComfyUI community.
 
-## ❤️ Contribuciones
+## ❤️ Contributions
 
-Si tienes ideas para mejorar el script, encuentras un error o quieres añadir nuevas funcionalidades, ¡no dudes en abrir un *issue* o un *pull request* en el repositorio!
+If you have ideas to improve the script, find a bug, or want to add new features, feel free to open an issue or a pull request in the repository!
