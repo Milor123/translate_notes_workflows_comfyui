@@ -2,7 +2,7 @@ import json
 import os
 import configparser
 from openai import OpenAI # Para OpenRouter
-from deep_translator import GoogleTranslator # Para Google Translate
+from deep_translator import GoogleTranslator, MyMemoryTranslator # MyMemory para detección de idioma si es necesario
 
 # --- Configuración ---
 CONFIG_FILE = 'config.ini'
@@ -10,20 +10,28 @@ DEFAULT_CONFIG_VALUES = {
     'OpenRouter': {
         'API_KEY': 'TU_OPENROUTER_API_KEY_AQUI',
         'BASE_URL': 'https://openrouter.ai/api/v1',
-        'MODEL_NAME': 'mistralai/mistral-7b-instruct',
+        'MODEL_NAME': 'openai/gpt-4o', # Modelo por defecto si no se especifica
         'HTTP_REFERER': '',
         'X_TITLE': ''
     },
     'General': {
-        'TARGET_LANGUAGE': 'es'
+        'SOURCE_LANGUAGE': 'en', # Idioma origen por defecto
+        'TARGET_LANGUAGE': 'es'  # Idioma destino por defecto
     }
+}
+
+# --- Mapeo de Idiomas ---
+LANGUAGE_NAMES = {
+    'auto': 'Detectar Automáticamente',
+    'en': 'Inglés', 'es': 'Español', 'fr': 'Francés', 'de': 'Alemán',
+    'ja': 'Japonés', 'pt': 'Portugués', 'it': 'Italiano', 'zh-cn': 'Chino Simplificado',
+    # Añadir más según sea necesario
 }
 
 def load_config():
     """Carga la configuración desde config.ini, creando el archivo si no existe."""
     config = configparser.ConfigParser()
     
-    # Si config.ini no existe, créalo con valores por defecto
     if not os.path.exists(CONFIG_FILE):
         print(f"Advertencia: Archivo de configuración '{CONFIG_FILE}' no encontrado.")
         print("Creando uno con valores por defecto. Por favor, edítalo con tu API Key de OpenRouter y preferencias.")
@@ -33,14 +41,12 @@ def load_config():
         
         with open(CONFIG_FILE, 'w', encoding='utf-8') as configfile:
             config.write(configfile)
-        # Devuelve los valores por defecto para que el script pueda al menos intentar funcionar o guiar al usuario
         return DEFAULT_CONFIG_VALUES
 
     config.read(CONFIG_FILE, encoding='utf-8')
     
-    # Asegurar que todas las secciones y claves esperadas existan, usando defaults si no
     loaded_config_values = {}
-    config_changed = False # Bandera para saber si necesitamos reescribir el config
+    config_changed = False 
     
     for section, defaults in DEFAULT_CONFIG_VALUES.items():
         loaded_config_values[section] = {}
@@ -52,10 +58,9 @@ def load_config():
                 loaded_config_values[section][key] = config.get(section, key)
             else:
                 loaded_config_values[section][key] = default_value
-                config.set(section, key, default_value) # Añade la clave faltante al objeto config
+                config.set(section, key, default_value) 
                 config_changed = True
                 
-    # Reescribir el config.ini solo si se añadieron nuevas claves por defecto o secciones
     if config_changed:
         print(f"Actualizando '{CONFIG_FILE}' con claves/secciones por defecto faltantes.")
         with open(CONFIG_FILE, 'w', encoding='utf-8') as configfile:
@@ -63,15 +68,40 @@ def load_config():
             
     return loaded_config_values
 
+def get_language_name(code):
+    return LANGUAGE_NAMES.get(code.lower(), code.upper())
+
 # --- Funciones de Traducción ---
 
-def translate_user_note_google(text_to_translate, target_language='es'):
+def detect_language_mymemory(text):
+    """Detecta el idioma de un texto usando MyMemoryTranslator (gratuito)."""
+    if not text or not text.strip():
+        return None
+    try:
+        # Usamos un par de idiomas comunes para la detección, MyMemory necesita un target
+        detected_lang_code = MyMemoryTranslator(source='auto', target='en').translate(text, return_detected_language=True)
+        if detected_lang_code and len(detected_lang_code) == 2 and detected_lang_code.lower() in LANGUAGE_NAMES:
+            print(f"Idioma detectado por MyMemory: {get_language_name(detected_lang_code)} ({detected_lang_code})")
+            return detected_lang_code.lower()
+        else:
+            print(f"MyMemory no pudo detectar el idioma confiablemente para: '{text[:50]}...'. Detectado: {detected_lang_code}")
+            return None
+    except Exception as e:
+        print(f"Error detectando idioma con MyMemory: {e}")
+        return None
+
+def translate_user_note_google(text_to_translate, source_language='en', target_language='es'):
     """Traduce un texto dado al idioma de destino utilizando GoogleTranslator."""
     if not text_to_translate or not isinstance(text_to_translate, str) or not text_to_translate.strip():
         return text_to_translate
 
+    src_lang_google = source_language
+    if source_language.lower() == 'auto':
+        print("Google Translate intentará detectar el idioma de origen automáticamente.")
+        src_lang_google = 'auto'
+    
     try:
-        translated_text = GoogleTranslator(source='en', target=target_language).translate(text_to_translate)
+        translated_text = GoogleTranslator(source=src_lang_google, target=target_language).translate(text_to_translate)
         if translated_text is None:
             print(f"Advertencia: La traducción de Google devolvió None para el texto: '{text_to_translate[:100]}...'")
             return text_to_translate
@@ -87,23 +117,16 @@ def translate_user_note_openrouter(text_to_translate, app_config):
 
     api_key = app_config['OpenRouter']['API_KEY']
     base_url = app_config['OpenRouter']['BASE_URL']
-    model = app_config['OpenRouter']['MODEL_NAME']
+    model_name_from_config = app_config['OpenRouter']['MODEL_NAME']
     http_referer = app_config['OpenRouter']['HTTP_REFERER']
     x_title = app_config['OpenRouter']['X_TITLE']
-    target_language_code = app_config['General']['TARGET_LANGUAGE']
-
-    # Mapeo simple de códigos de idioma a nombres completos para el prompt
-    language_names = {
-        'es': 'Español', 'en': 'Inglés', 'fr': 'Francés', 'de': 'Alemán',
-        'ja': 'Japonés', 'pt': 'Portugués', 'it': 'Italiano', 'zh-cn': 'Chino Simplificado',
-        # Añadir más según sea necesario
-    }
-    target_language_name = language_names.get(target_language_code.lower(), target_language_code.upper())
+    
+    source_language_code = app_config['General']['SOURCE_LANGUAGE'].lower()
+    target_language_code = app_config['General']['TARGET_LANGUAGE'].lower()
 
     if not api_key or api_key == 'TU_OPENROUTER_API_KEY_AQUI':
         print("\nError: La API Key de OpenRouter no está configurada en 'config.ini'.")
-        print("Por favor, edita 'config.ini' con tu clave válida.")
-        return text_to_translate # Devuelve original si no hay API key
+        return text_to_translate
 
     client = OpenAI(
         base_url=base_url,
@@ -114,48 +137,59 @@ def translate_user_note_openrouter(text_to_translate, app_config):
     if http_referer: extra_headers["HTTP-Referer"] = http_referer
     if x_title: extra_headers["X-Title"] = x_title
 
+    actual_source_language_code = source_language_code
+    if source_language_code == 'auto':
+        print("Intentando detectar idioma de origen para traducción AI...")
+        detected_lang = detect_language_mymemory(text_to_translate)
+        if detected_lang:
+            actual_source_language_code = detected_lang
+            print(f"Idioma de origen detectado como: {get_language_name(actual_source_language_code)}")
+        else:
+            print("No se pudo detectar el idioma de origen automáticamente, se asumirá Inglés para el prompt.")
+            actual_source_language_code = 'en' 
+
+    source_language_name = get_language_name(actual_source_language_code)
+    target_language_name = get_language_name(target_language_code)
+
+    # Evitar traducir si el origen detectado/especificado es igual al destino
+    if actual_source_language_code == target_language_code:
+        print(f"El idioma de origen ({source_language_name}) y destino ({target_language_name}) son el mismo. Saltando traducción.")
+        return text_to_translate
+
     system_prompt = f"""Eres un asistente de traducción experto.
-Tu tarea es traducir notas de usuario del Inglés al {target_language_name}.
+Tu tarea es traducir notas de usuario del {source_language_name} al {target_language_name}.
+Si el idioma de origen es "Detectar Automáticamente", primero identifica el idioma del texto proporcionado y luego tradúcelo.
 Estas notas provienen de un software de generación de imágenes mediante inteligencia artificial llamado ComfyUI.
 Es crucial que traduzcas con la máxima precisión los términos técnicos relacionados con la inteligencia artificial, el machine learning, los modelos de difusión (diffusion models), samplers, checkpoints, LoRAs, VAEs, y la interfaz de usuario de ComfyUI.
-Si encuentras un término técnico que tiene una traducción establecida y comúnmente aceptada en {target_language_name} dentro del contexto de la IA, utilízala (por ejemplo, "machine learning" como "aprendizaje automático").
-Si un término es un nombre propio de una técnica, modelo, parámetro específico de ComfyUI (ej. "Euler a", "DPM++ 2M Karras", "CFG Scale"), o si traducirlo literalmente podría causar confusión o pérdida de significado técnico, es preferible conservarlo en Inglés.
+Si encuentras un término técnico que tiene una traducción establecida y comúnmente aceptada en {target_language_name} dentro del contexto de la IA, utilízala (por ejemplo, "machine learning" como "aprendizaje automático" si traduces al Español).
+Si un término es un nombre propio de una técnica, modelo, parámetro específico de ComfyUI (ej. "Euler a", "DPM++ 2M Karras", "CFG Scale"), o si traducirlo literalmente podría causar confusión o pérdida de significado técnico, es preferible conservarlo en el idioma original.
 Mantén el formato original del texto, incluyendo saltos de línea, listas, y cualquier formato Markdown simple (como `*cursiva*` o `**negrita**`).
 No añadas comentarios, introducciones o conclusiones propias; solo devuelve el texto traducido.
-Ejemplo de nota 1:
-Original: "Tip: multistep samplers usually adhere to unsampled images more effectively than others."
-Traducción a {target_language_name} (ej. Español): "Consejo: los samplers de múltiples pasos suelen adherirse a las imágenes no muestreadas (unsampled) de manera más efectiva que otros."
 
-Ejemplo de nota 2:
-Original: "This is a checkpoint that, for convenience, includes the stage B lite CSBW finetune, clip G, and stage A (the FT_HQ finetune)."
-Traducción a {target_language_name} (ej. Español): "Este es un checkpoint que, por conveniencia, incluye el finetune CSBW lite de la etapa B, clip G, y la etapa A (el finetune FT_HQ)."
-
-Traduce el siguiente texto del Inglés al {target_language_name} con estas directrices:
+Traduce el siguiente texto del {source_language_name} (o detectado automáticamente si así se indica) al {target_language_name} con estas directrices:
 """
 
     try:
         completion = client.chat.completions.create(
             extra_headers=extra_headers if extra_headers else None,
-            model=model,
+            model=model_name_from_config,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": text_to_translate}
             ],
-            temperature=0.2, # Enfocado en la precisión, baja creatividad
-            max_tokens=len(text_to_translate.split()) * 3 + 100 # Estimación generosa para la traducción
+            temperature=0.2,
+            max_tokens=len(text_to_translate.split()) * 3 + 150
         )
         translated_text = completion.choices[0].message.content.strip()
         
-        # Pequeña validación: si la traducción es muy corta comparada con el original, puede ser un error.
         if len(translated_text) < len(text_to_translate) * 0.3 and len(text_to_translate) > 50:
             print(f"Advertencia: La traducción de OpenRouter parece demasiado corta. '{translated_text[:100]}...' vs '{text_to_translate[:100]}...'. Se mantendrá el original.")
             return text_to_translate
             
         return translated_text
     except Exception as e:
-        print(f"Error al traducir con OpenRouter (modelo: {model}): '{text_to_translate[:100]}...'. Error: {e}")
+        print(f"Error al traducir con OpenRouter (modelo: {model_name_from_config}): '{text_to_translate[:100]}...'. Error: {e}")
         return text_to_translate
-
 
 def process_comfyui_json(filepath, translator_choice, app_config):
     """
@@ -180,11 +214,26 @@ def process_comfyui_json(filepath, translator_choice, app_config):
 
     nodes_processed_count = 0
     notes_translated_count = 0
+    source_lang_from_config = app_config['General']['SOURCE_LANGUAGE']
     target_lang_from_config = app_config['General']['TARGET_LANGUAGE']
 
+    source_lang_from_config_lower = source_lang_from_config.lower()
+    target_lang_from_config_lower = target_lang_from_config.lower()
+
+    if source_lang_from_config_lower != 'auto' and source_lang_from_config_lower == target_lang_from_config_lower:
+        print(f"El idioma de origen ({get_language_name(source_lang_from_config)}) y destino ({get_language_name(target_lang_from_config)}) son el mismo en la configuración.")
+        print("No se realizará ninguna traducción. Si deseas traducir, ajusta los idiomas en 'config.ini'.")
+        base, ext = os.path.splitext(filepath)
+        output_filepath = f"{base}_procesado_sin_traduccion{ext}"
+        try:
+            with open(output_filepath, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            print(f"Archivo copiado (sin traducción) a: {output_filepath}")
+        except Exception as e:
+            print(f"Error al guardar la copia del archivo: {e}")
+        return
+
     for i, node in enumerate(data['nodes']):
-        # Los nodos de nota en ComfyUI tienen el tipo "Note"
-        # y el texto de la nota está en widgets_values[0]
         if node.get('type') == "Note":
             nodes_processed_count += 1
             if 'widgets_values' in node and \
@@ -194,7 +243,7 @@ def process_comfyui_json(filepath, translator_choice, app_config):
 
                 original_note = node['widgets_values'][0]
 
-                if not original_note.strip(): # Saltar notas vacías o solo con espacios
+                if not original_note.strip():
                     print(f"Nodo Note ID: {node.get('id', f'índice_{i}')} - Nota vacía. Saltando.")
                     continue
 
@@ -203,20 +252,20 @@ def process_comfyui_json(filepath, translator_choice, app_config):
 
                 translated_note = ""
                 if translator_choice == '1': # Google
-                    translated_note = translate_user_note_google(original_note, target_lang_from_config)
+                    translated_note = translate_user_note_google(original_note, source_lang_from_config, target_lang_from_config)
                 elif translator_choice == '2': # OpenRouter
-                    # Verificar si la API key es válida antes de cada llamada podría ser excesivo,
-                    # la función translate_user_note_openrouter ya lo verifica al inicio.
                     translated_note = translate_user_note_openrouter(original_note, app_config)
                 
-                if translated_note and translated_note != original_note and translated_note.strip():
+                if translated_note and translated_note.strip() and translated_note != original_note :
                     node['widgets_values'][0] = translated_note
                     print(f"Texto traducido (primeros 100 caracteres): '{translated_note[:100]}...'")
                     notes_translated_count += 1
                 elif not translated_note or not translated_note.strip():
                      print("Advertencia: La traducción resultó en un texto vacío. Se mantuvo el original.")
+                elif translated_note == original_note:
+                    print("La traducción es idéntica al original, no se tradujo o el idioma de origen y destino son iguales para esta nota. Se mantuvo el original.")
                 else:
-                    print("Texto no traducido (la traducción falló, es idéntica o no se realizó y se mantuvo el original).")
+                    print("Texto no traducido (la traducción falló o no se realizó y se mantuvo el original).")
             else:
                 print(f"Advertencia: Nodo Note ID {node.get('id', f'índice_{i}')} no tiene 'widgets_values' con el formato esperado o la nota no es un string.")
 
@@ -225,22 +274,23 @@ def process_comfyui_json(filepath, translator_choice, app_config):
     print(f"Nodos de tipo 'Note' encontrados y procesados: {nodes_processed_count}")
     print(f"Notas traducidas exitosamente: {notes_translated_count}")
 
-    # Guardar el JSON modificado
     base, ext = os.path.splitext(filepath)
-    suffix = "_traducido_google" if translator_choice == '1' else "_traducido_ai"
-    output_filepath = f"{base}{suffix}{ext}"
+    suffix_translator = "_google" if translator_choice == '1' else "_ai"
+    # Para el sufijo de idioma, si el origen es AUTO, podríamos no incluirlo o poner 'auto'
+    src_display_suffix = source_lang_from_config.lower() if source_lang_from_config.lower() != 'auto' else 'auto'
+    suffix_lang = f"_{src_display_suffix}_a_{target_lang_from_config.lower()}"
+    output_filepath = f"{base}_traducido{suffix_translator}{suffix_lang}{ext}"
 
     try:
         with open(output_filepath, 'w', encoding='utf-8') as f:
-            # indent=2 para que sea legible, ensure_ascii=False para caracteres especiales
             json.dump(data, f, indent=2, ensure_ascii=False)
         print(f"Archivo traducido guardado como: {output_filepath}")
     except Exception as e:
         print(f"Error al guardar el archivo traducido: {e}")
 
 if __name__ == "__main__":
-    print("Traductor de notas para JSON de ComfyUI")
-    print("=======================================")
+    print("Traductor de notas para JSON de ComfyUI v2.1") # Pequeña actualización de versión
+    print("===========================================")
     
     app_config = load_config()
 
@@ -252,8 +302,14 @@ if __name__ == "__main__":
         print(f"Error: El archivo '{json_file_path}' no existe. Saliendo.")
         exit()
 
+    print("\nConfiguración de Idiomas actual (desde config.ini):")
+    src_lang_cfg = app_config['General']['SOURCE_LANGUAGE']
+    tgt_lang_cfg = app_config['General']['TARGET_LANGUAGE']
+    print(f"Idioma de Origen: {get_language_name(src_lang_cfg)} ({src_lang_cfg})")
+    print(f"Idioma de Destino: {get_language_name(tgt_lang_cfg)} ({tgt_lang_cfg})")
+
     print("\nElige el método de traducción:")
-    print("1: Google Translate (rápido, sin API, calidad estándar)")
+    print("1: Google Translate (rápido, sin API Key, calidad estándar)")
     print("2: OpenRouter AI (requiere API Key en config.ini, mayor calidad potencial)")
 
     translator_choice = ""
@@ -264,6 +320,7 @@ if __name__ == "__main__":
 
     if translator_choice == '2':
         api_key_or = app_config['OpenRouter']['API_KEY']
+        model_or = app_config['OpenRouter']['MODEL_NAME']
         if not api_key_or or api_key_or == 'TU_OPENROUTER_API_KEY_AQUI':
             print("\nADVERTENCIA: La API Key de OpenRouter no está configurada correctamente en 'config.ini'.")
             print("No se podrá usar OpenRouter AI.")
@@ -275,11 +332,16 @@ if __name__ == "__main__":
                 print("Traducción cancelada. Por favor, configura tu API Key en 'config.ini'.")
                 exit()
         else:
-             print(f"Usando OpenRouter AI con el modelo: {app_config['OpenRouter']['MODEL_NAME']}")
-             print(f"Traduciendo al idioma: {app_config['General']['TARGET_LANGUAGE']}")
-
+             print(f"Usando OpenRouter AI con el modelo: {model_or}")
+             if src_lang_cfg.lower() == 'auto':
+                 print(f"Intentando detectar idioma de origen automáticamente y traduciendo a: {get_language_name(tgt_lang_cfg)}")
+             else:
+                 print(f"Traduciendo de {get_language_name(src_lang_cfg)} a {get_language_name(tgt_lang_cfg)}")
     elif translator_choice == '1':
         print("Usando Google Translate.")
-        print(f"Traduciendo al idioma: {app_config['General']['TARGET_LANGUAGE']}")
-
+        if src_lang_cfg.lower() == 'auto':
+            print(f"Intentando detectar idioma de origen automáticamente y traduciendo a: {get_language_name(tgt_lang_cfg)}")
+        else:
+            print(f"Traduciendo de {get_language_name(src_lang_cfg)} a {get_language_name(tgt_lang_cfg)}")
+            
     process_comfyui_json(json_file_path, translator_choice, app_config)
