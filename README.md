@@ -1,3 +1,11 @@
+<div align="center">
+
+| **🇬🇧/🇺🇸 English (Current)** | [🇪🇸 Español](README_es.md) |
+|:---:|:---:|
+
+</div>
+
+
 # ComfyUI Workflow Note Translator
 
 This Python script translates the text notes within your ComfyUI workflow files (`.json`), allowing you to choose between a quick translation via Google Translate or a higher-quality, context-aware translation using the OpenRouter API.
