@@ -63,9 +63,9 @@ TARGET_LANGUAGE = es
 3.  Ejecuta el script desde tu terminal:
 
     ```bash
-    python tu_script.py
+    translate_comfyui_workflow.py
     ```
-    *(Reemplaza `translate_comfyui_workflow.py` con el nombre real de tu archivo)*
+    
 
 4.  El script te guiará pidiéndote:
     * La ruta a tu archivo de workflow `.json`.
