@@ -93,7 +93,7 @@ The script parses the `.json` file structure and specifically looks for nodes wh
 
 ## 👨‍💻 Development
 
-This script was developed with the assistance of a large language model (LLM). The core code and logic were generated and refined through interactions with Claude 3 Opus. The goal was to create a useful and flexible tool for the ComfyUI community.
+This script was developed with the assistance of a large language model (LLM). The core code and logic were generated and refined through interactions with Gemini 2.5 Pro Preview 05-06. The goal was to create a useful and flexible tool for the ComfyUI community.
 
 ## ❤️ Contributions
 
