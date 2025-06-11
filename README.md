@@ -23,7 +23,9 @@ This Python script translates the text notes within your ComfyUI workflow files 
 
 You can easily install them using pip:
 ```bash
-pip install deep_translator openai
+      
+pip install deep_translator openai configparser
+
 ```
 
 ## 🔧 Configuration
