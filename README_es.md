@@ -23,7 +23,7 @@ Este script de Python traduce las notas de texto dentro de tus archivos de workf
 
 Puedes instalarlas fácilmente con pip:
 ```bash
-pip install deep_translator openai
+pip install deep_translator openai configparser
 ```
 
 ## 🔧 Configuración
